@@ -441,11 +441,11 @@ export function monteCarlo(p: Inputs, n = 600) {
   }
   npvs.sort((a, b) => a - b);
   bcrs.sort((a, b) => a - b);
-  const pct = (arr: number[], q: number) => arr[Math.floor(q * (arr.length - 1))];
-  const min = npvs[0], max = npvs[npvs.length - 1];
+  const pct = (arr: number[], q: number) => arr[Math.floor(q * (arr.length - 1))]!;
+  const min = npvs[0]!, max = npvs[npvs.length - 1]!;
   const bins = 24, w = (max - min) / bins || 1;
   const hist = Array.from({ length: bins }, (_, i) => ({ x: min + w * (i + 0.5), count: 0 }));
-  for (const v of npvs) hist[Math.min(bins - 1, Math.floor((v - min) / w))].count++;
+  for (const v of npvs) hist[Math.min(bins - 1, Math.floor((v - min) / w))]!.count++;
   return {
     hist, probPositive: npvs.filter((v) => v > 0).length / n,
     p5: pct(npvs, 0.05), p50: pct(npvs, 0.5), p95: pct(npvs, 0.95), mean: npvs.reduce((a, b) => a + b, 0) / n,

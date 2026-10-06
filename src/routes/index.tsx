@@ -81,7 +81,7 @@ function Index() {
 
   const rows = res.rows;
   const exportCsv = () => {
-    const keys = Object.keys(rows[0]) as (keyof (typeof rows)[0])[];
+    const keys = Object.keys(rows[0]!) as (keyof (typeof rows)[0])[];
     const csv = [keys.join(","), ...rows.map((r) => keys.map((k) => r[k]).join(","))].join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -397,7 +397,7 @@ function Index() {
                   <Tooltip {...tip} formatter={(v: number) => fm(v)} />
                   <Legend />
                   <ReferenceLine y={0} stroke="var(--foreground)" />
-                  {scen.map((s, i) => <Line key={s.name} dataKey={s.name} stroke={C[[3, 0, 4][i]]} strokeWidth={2} dot={false} />)}
+                  {scen.map((s, i) => <Line key={s.name} dataKey={s.name} stroke={C[[3, 0, 4][i] ?? 0]} strokeWidth={2} dot={false} />)}
                 </LineChart>
               </ChartCard>
             </TabsContent>
@@ -460,7 +460,7 @@ function Index() {
                   </section>
 
                   <section><h3 className="text-lg font-semibold">5. Sensitivity and risk</h3>
-                    <p>The most influential parameters are {tor.slice(0, 4).map((t) => t.label.toLowerCase()).join(", ")}. NPV ranges from {fm(discSens[discSens.length - 1].npv)} at 8% to {fm(discSens[0].npv)} at 2%. The Monte Carlo 90% interval is {fm(mc.p5)} to {fm(mc.p95)}. Scenario NPVs: {scen.map((s) => `${s.name} ${fm(s.r.npv, 0)}`).join(", ")}.</p>
+                    <p>The most influential parameters are {tor.slice(0, 4).map((t) => t.label.toLowerCase()).join(", ")}. NPV ranges from {fm(discSens[discSens.length - 1]!.npv)} at 8% to {fm(discSens[0]!.npv)} at 2%. The Monte Carlo 90% interval is {fm(mc.p5)} to {fm(mc.p95)}. Scenario NPVs: {scen.map((s) => `${s.name} ${fm(s.r.npv, 0)}`).join(", ")}.</p>
                   </section>
 
                   <section><h3 className="text-lg font-semibold">6. Limitations</h3>

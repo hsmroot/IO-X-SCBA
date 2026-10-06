@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- The SCBA/I-O model engine lives in pure TypeScript (src/lib/model.ts) and runs client-side; UI only renders its outputs — keeps the model testable and auditable.

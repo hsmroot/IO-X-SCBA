@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Biobinder NZ — Hybrid I/O Social Cost-Benefit Model" },
-      { name: "description", content: "Interactive input-output SCBA model that mimics CGE results for biobinder substitution of bitumen in New Zealand roads." },
+      { name: "description", content: "Interactive input-output SCBA model with separate economic-impact scenarios for biobinder substitution of bitumen in New Zealand roads." },
       { property: "og:title", content: "Biobinder NZ — Hybrid I/O SCBA Model" },
       { property: "og:description", content: "NPV, BCR, GDP, jobs, emissions, sensitivity and Monte Carlo for NZ biobinders." },
       { property: "og:type", content: "website" },
@@ -510,7 +510,7 @@ function Index() {
                   <section><h3 className="text-lg font-semibold">3. Methodology</h3>
                     <p><strong>SCBA core.</strong> Resource costs (capital, operating, energy, feedstock at opportunity cost) are compared with social benefits: avoided import resource cost of bitumen, shadow-priced carbon, pavement maintenance differences, air-quality co-benefits, shadow wage gains and residual value. Government funding attracts a deadweight cost via the MCPF ({p.mcpf}).</p>
                     <p><strong>I/O impact core.</strong> Final-demand shocks to five aggregated sectors are run through {p.useTypeII ? "Type II" : "Type I"} multipliers derived from Stats NZ national input-output tables, giving gross output, value added, household income and employment. Displaced fuel import/wholesale activity enters as a negative shock.</p>
-                    <p><strong>CGE-mimic adjustments.</strong> (i) Armington substitution (σ = {p.armingtonSigma}) scales the adoption ceiling with the bitumen/biobinder relative price; (ii) labour-market crowding-out of {fp(res.crowdOut, 0)} (base {fp(p.baseCrowdOut, 0)}, scaled by NAIRU {p.nairu}% / unemployment {p.unemployment}%) converts gross I/O impacts to net economy-wide effects; (iii) shadow wages reflect the opportunity cost of labour; (iv) shadow FX premium on import savings ({p.shadowFxPremium}%). Economy-wide impacts are reported separately and are <em>not</em> added to the SCBA to avoid double counting.</p>
+                    <p><strong>Scenario adjustments (not a CGE approximation).</strong> (i) Armington substitution (σ = {p.armingtonSigma}) scales the adoption ceiling with the bitumen/biobinder relative price; (ii) labour-market crowding-out of {fp(res.crowdOut, 0)} (base {fp(p.baseCrowdOut, 0)}, scaled by NAIRU {p.nairu}% / unemployment {p.unemployment}%) converts gross I/O impacts to net economy-wide effects; (iii) shadow wages reflect the opportunity cost of labour; (iv) shadow FX premium on import savings ({p.shadowFxPremium}%). Economy-wide impacts are reported separately and are <em>not</em> added to the SCBA to avoid double counting.</p>
                   </section>
 
                   <section><h3 className="text-lg font-semibold">4. Results</h3>
@@ -530,7 +530,7 @@ function Index() {
 
                   <section><h3 className="text-lg font-semibold">6. Limitations</h3>
                     <ul className="list-disc space-y-1 pl-5">
-                      <li>I/O assumes fixed technical coefficients and constant returns; the CGE-mimic layer approximates, but does not solve, general equilibrium price and factor-market responses.</li>
+                      <li>I/O assumes fixed technical coefficients and constant returns; the crowding-out scenario adjustment is an assumption-driven sensitivity, not a general-equilibrium solution; I/O activity results are not included in the social NPV.</li>
                       <li>Multipliers are aggregated approximations of Stats NZ tables; replace with project-specific extracts where available.</li>
                       <li>Biobinder pavement performance in NZ conditions (chipseal dominance) is still being trialled; life-ratio and emission factors carry high uncertainty.</li>
                       <li>Biogenic carbon accounting is contested; test results with storage switched off.</li>

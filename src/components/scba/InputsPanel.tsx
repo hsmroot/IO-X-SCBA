@@ -14,7 +14,7 @@ const GROUPS: { title: string; fields: Field[] }[] = [
     fields: [
       ["bitumenDemand", "Bitumen demand", "t/yr", 1000], ["demandGrowth", "Demand growth", "%/yr", 0.1],
       ["bitumenPrice", "Bitumen price (delivered)", "NZ$/t", 10], ["bitumenPriceGrowth", "Real price growth", "%/yr", 0.1],
-      ["bitumenImportShare", "Import share", "0–1", 0.05], ["maxBlendShare", "Max substitution share", "0–1", 0.01],
+      ["bitumenImportShare", "Import share", "0–1", 0.05], ["borderPriceShare", "Border-price share of delivered price", "0–1", 0.01], ["maxBlendShare", "Max substitution share", "0–1", 0.01],
       ["adoptionMidpoint", "Adoption midpoint", "yrs", 0.5], ["adoptionSteepness", "Adoption steepness", "k", 0.1],
       ["armingtonSigma", "Armington elasticity σ", "", 0.1],
     ],
@@ -24,23 +24,23 @@ const GROUPS: { title: string; fields: Field[] }[] = [
     fields: [
       ["plantCapacity", "Capacity", "t/yr", 1000], ["capex", "Capital cost", "NZ$m", 1], ["capexDomesticShare", "Capex domestic content", "0–1", 0.05],
       ["opexPerT", "Opex (non-feedstock)", "NZ$/t", 10], ["feedstockRatio", "Residue per t binder", "t/t", 0.1],
-      ["feedstockPrice", "Residue price", "NZ$/t", 5], ["feedstockOppCost", "Feedstock opportunity-cost share", "0–1", 0.05],
+      ["feedstockPrice", "Residue price", "NZ$/t", 5], ["feedstockOppCost", "Residue value in best alternative use (share of price)", "0–1", 0.05],
       ["energyPerT", "Energy cost", "NZ$/t", 10], ["laborSharePerT", "Labour share of opex", "0–1", 0.05],
       ["biobinderPriceDiscount", "Price discount vs bitumen", "%", 1], ["plantLife", "Plant life", "yrs"],
       ["salvageShare", "Residual value share", "0–1", 0.05], ["rdTrialCost", "R&D / road trials", "NZ$m", 0.5],
     ],
   },
-  { title: "Pavement performance", fields: [["pavementLifeRatio", "Life ratio vs bitumen", "×", 0.01], ["maintenanceCostPerT", "Lifecycle maint. per t binder", "NZ$/t", 50]] },
+  { title: "Pavement performance", fields: [["pavementLifeRatio", "Life ratio vs bitumen", "×", 0.01], ["maintenanceCostPerT", "Lifecycle maint. per t binder", "NZ$/t", 50], ["binderPerLaneKm", "Binder per lane-km reseal", "t", 0.5], ["resealInterval", "Bitumen reseal interval", "yrs", 1]] },
   {
     title: "Environment",
     fields: [
       ["bitumenEF", "Bitumen EF", "tCO₂e/t", 0.01], ["biobinderEF", "Biobinder process EF", "tCO₂e/t", 0.01],
-      ["biogenicStorage", "Biogenic carbon stored", "tCO₂e/t", 0.05], ["carbonPrice", "Shadow carbon price", "NZ$/t", 5],
+      ["biogenicStorage", "Gross biogenic carbon in binder", "tCO₂e/t", 0.05], ["collectionEF", "Residue collection & haul EF", "tCO₂e/t residue", 0.005], ["counterfactualStorage", "Storage that would occur anyway", "0–1", 0.05], ["eolRelease", "Released at end of road life", "0–1", 0.05], ["carbonPrice", "Shadow carbon price", "NZ$/t", 5],
       ["carbonPriceGrowth", "Carbon price growth", "%/yr", 0.1], ["airQualityPerT", "Air quality co-benefit", "NZ$/t", 5],
     ],
   },
   {
-    title: "Economy & CGE-mimic",
+    title: "Economy & scenario adjustment",
     fields: [
       ["discountRate", "Real discount rate", "%", 0.5], ["mcpf", "Marginal cost of public funds", "×", 0.05],
       ["subsidyShare", "Govt share of capex", "0–1", 0.05], ["unemployment", "Unemployment rate", "%", 0.1],
@@ -76,10 +76,16 @@ export function InputsPanel({ p, set }: { p: Inputs; set: (p: Inputs) => void })
                   <Switch checked={p.includeBiogenic} onCheckedChange={(v) => set({ ...p, includeBiogenic: v })} />
                 </div>
               )}
-              {g.title === "Economy & CGE-mimic" && (
+              {g.title === "Economy & scenario adjustment" && (
                 <div className="flex items-center justify-between">
                   <Label className="text-xs text-muted-foreground">Type II (include household induced)</Label>
                   <Switch checked={p.useTypeII} onCheckedChange={(v) => set({ ...p, useTypeII: v })} />
+                </div>
+              )}
+              {g.title === "Economy & scenario adjustment" && (
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Include shadow-wage benefit in NPV</Label>
+                  <Switch checked={p.includeShadowWage} onCheckedChange={(v) => set({ ...p, includeShadowWage: v })} />
                 </div>
               )}
             </div>

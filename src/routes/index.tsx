@@ -415,7 +415,21 @@ function Index() {
                   {[["Mean NPV", fm(mc.mean)], ["NPV 90% interval", `${fm(mc.p5)} to ${fm(mc.p95)}`], ["BCR P5 / P50 / P95", `${mc.bcrP5.toFixed(2)} / ${mc.bcrP50.toFixed(2)} / ${mc.bcrP95.toFixed(2)}`], ["Probability NPV > 0", fp(mc.probPositive, 0)]].map(([a, b]) => (
                     <div key={a} className="flex justify-between"><span>{a}</span><span className="num">{b}</span></div>
                   ))}
-                  <p className="pt-2 text-xs text-muted-foreground">Triangular distributions on 10 uncertain parameters (prices, costs, adoption, carbon, emission factors). Seeded for reproducibility.</p>
+                  <p className="pt-2 text-xs text-muted-foreground">See the assumptions table below — this probability depends entirely on those ranges.</p>
+                </CardContent>
+              </Card>
+              <Card className="xl:col-span-2">
+                <CardHeader><CardTitle className="text-base">Monte Carlo assumptions</CardTitle></CardHeader>
+                <CardContent>
+                  <p className="mb-2 text-xs text-muted-foreground">600 draws, seed 42. Each variable is drawn independently from a triangular distribution (low, current value, high). Correlations are ignored, which narrows the spread, and variables not listed are held fixed. Ranges are judgement-based, not estimated from data — widen them to stress-test.</p>
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Variable</TableHead><TableHead className="text-right">Low</TableHead><TableHead className="text-right">Mode</TableHead><TableHead className="text-right">High</TableHead><TableHead>Basis</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {MC_VARY.map((v) => { const b = p[v.key] as number; return (
+                        <TableRow key={v.key}><TableCell>{v.label}</TableCell><TableCell className="num text-right">{fn(b * v.lo, 2)}</TableCell><TableCell className="num text-right">{fn(b, 2)}</TableCell><TableCell className="num text-right">{fn(b * v.hi, 2)}</TableCell><TableCell className="text-xs text-muted-foreground">{v.why}</TableCell></TableRow>
+                      ); })}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             </TabsContent>

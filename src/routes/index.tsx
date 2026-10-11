@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InputsPanel } from "@/components/scba/InputsPanel";
 import {
-  DEFAULT_INPUTS, REGION_SHARES, SCENARIOS, SOURCES, monteCarlo, runModel, tornado, type Inputs,
+  DEFAULT_INPUTS, REGION_SHARES, SCENARIOS, SOURCES, monteCarlo, runModel, crowdOutSensitivity, MC_VARY, tornado, type Inputs,
 } from "@/lib/model";
 import { fm, fn, fp } from "@/lib/format";
 
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Biobinder NZ — Hybrid I/O Social Cost-Benefit Model" },
-      { name: "description", content: "Interactive input-output SCBA model that mimics CGE results for biobinder substitution of bitumen in New Zealand roads." },
+      { name: "description", content: "Interactive input-output SCBA model with separate economic-impact scenarios for biobinder substitution of bitumen in New Zealand roads." },
       { property: "og:title", content: "Biobinder NZ — Hybrid I/O SCBA Model" },
       { property: "og:description", content: "NPV, BCR, GDP, jobs, emissions, sensitivity and Monte Carlo for NZ biobinders." },
       { property: "og:type", content: "website" },
@@ -62,6 +62,7 @@ function Index() {
   const res = useMemo(() => runModel(p), [p]);
   const tor = useMemo(() => tornado(p), [p]);
   const mc = useMemo(() => monteCarlo(p), [p]);
+  const coSens = useMemo(() => crowdOutSensitivity(p), [p]);
   const scen = useMemo(
     () => Object.entries(SCENARIOS).map(([name, o]) => ({ name, r: runModel({ ...p, ...o }) })),
     [p],
@@ -101,7 +102,7 @@ function Index() {
             <div className="text-xs uppercase tracking-[0.2em] text-primary">Aotearoa New Zealand · Road binders</div>
             <h1 className="mt-1 text-3xl font-semibold md:text-4xl">Biobinder Hybrid I/O–SCBA Model</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Input-output impact core with general-equilibrium adjustments (Armington substitution, labour-market crowding-out, shadow wages, MCPF) to approximate CGE outcomes where full CGE data is unavailable.
+              Social cost–benefit analysis (resource costs and benefits only) reported separately from input-output economic-activity impacts. The I/O results carry a scenario adjustment for crowding-out — not an approximation of a full CGE model.
             </p>
           </div>
           <div className="no-print flex flex-wrap gap-2">
@@ -127,12 +128,12 @@ function Index() {
             <Kpi label="Economic IRR" value={res.irr === null ? "n/a" : fp(res.irr)} />
             <Kpi label="Disc. payback" value={res.payback === null ? "Beyond horizon" : `${res.payback} yrs`} />
             <Kpi label="CO₂e abated" value={`${fn(res.totalEmissions / 1000)} kt`} sub={`Abatement cost $${fn(res.costPerTonne)}/t`} />
-            <Kpi label="Net jobs (peak)" value={fn(res.peakJobs)} sub={`Crowd-out ${fp(res.crowdOut, 0)}`} />
+            <Kpi label="Activity: jobs (peak)" value={fn(res.peakJobs)} sub={`Not in NPV · crowd-out ${fp(res.crowdOut, 0)}`} />
           </div>
 
           <Tabs defaultValue="summary">
             <TabsList className="no-print flex h-auto flex-wrap justify-start">
-              {["summary", "cashflow", "economy", "environment", "risk", "scenarios", "data", "report"].map((t) => (
+              {["summary", "cashflow", "economy", "counterfactual", "environment", "risk", "scenarios", "data", "report"].map((t) => (
                 <TabsTrigger key={t} value={t} className="capitalize">{t === "risk" ? "Sensitivity & risk" : t}</TabsTrigger>
               ))}
             </TabsList>
@@ -216,10 +217,10 @@ function Index() {
 
             <TabsContent value="economy" className="mt-4 grid gap-4 xl:grid-cols-2">
               <Card className="xl:col-span-2">
-                <CardHeader><CardTitle className="text-base">I/O gross vs CGE-adjusted net impacts (cumulative)</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base">I/O gross vs Scenario-adjusted impacts (cumulative)</CardTitle></CardHeader>
                 <CardContent>
                   <Table>
-                    <TableHeader><TableRow><TableHead>Measure</TableHead><TableHead className="text-right">I/O gross</TableHead><TableHead className="text-right">CGE-adjusted net</TableHead><TableHead className="text-right">Adjustment</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Measure</TableHead><TableHead className="text-right">I/O gross</TableHead><TableHead className="text-right">Scenario-adjusted</TableHead><TableHead className="text-right">Adjustment</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {([["Gross output", "output", true], ["Value added (GDP)", "gdp", true], ["Household income", "income", true], ["Job-years (FTE)", "jobs", false]] as const).map(([l, k, money]) => (
                         <TableRow key={k}>
@@ -231,10 +232,19 @@ function Index() {
                       ))}
                     </TableBody>
                   </Table>
-                  <p className="mt-3 text-xs text-muted-foreground">I/O multipliers assume idle resources and fixed prices. The CGE-mimic layer scales impacts by (1 − crowding-out), where crowding-out rises as unemployment approaches the NAIRU, reflecting resource reallocation a CGE would capture. Note the negative fuel-wholesale effect from displaced imports.</p>
+                  <p className="mt-3 text-xs text-muted-foreground">These are measures of economic activity, not net social benefits, and are excluded from the social NPV: much of this activity draws workers and capital away from other uses. The scenario adjustment scales I/O results by (1 − crowding-out), where crowding-out = base rate × (NAIRU ÷ unemployment)^0.75. The base rate (default 50%) is an assumption, informed by the general finding in NZ and international CGE comparisons that I/O overstates national impacts by roughly half or more when the labour market is near full employment; it is not estimated from NZ data. The table below shows results across alternative values.</p>
+                  <Table className="mt-3">
+                    <TableHeader><TableRow><TableHead>Crowding-out</TableHead><TableHead className="text-right">GDP (cum.)</TableHead><TableHead className="text-right">Income (cum.)</TableHead><TableHead className="text-right">Avg FTE/yr</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {coSens.map((c) => (
+                        <TableRow key={c.crowdOut}><TableCell className="num">{fp(c.crowdOut, 0)}{c.crowdOut === 0 ? " (pure I/O)" : ""}</TableCell><TableCell className="num text-right">{fm(c.gdp)}</TableCell><TableCell className="num text-right">{fm(c.income)}</TableCell><TableCell className="num text-right">{fn(c.jobs)}</TableCell></TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <p className="mt-2 text-xs text-muted-foreground">Social NPV is unaffected by these values{p.includeShadowWage ? " except through the optional shadow-wage benefit (currently ON)" : " (shadow-wage benefit is switched off)"}.</p>
                 </CardContent>
               </Card>
-              <ChartCard title="Net GDP and employment over time" note="CGE-adjusted">
+              <ChartCard title="Net GDP and employment over time" note="Scenario-adjusted economic activity — not in social NPV">
                 <ComposedChart data={rows}>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
                   <XAxis dataKey="year" tick={axis} />
@@ -314,10 +324,51 @@ function Index() {
                 <CardHeader><CardTitle className="text-base">Emissions summary</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between"><span>Total abated over horizon</span><span className="num">{fn(res.totalEmissions)} tCO₂e</span></div>
-                  <div className="flex justify-between"><span>Net abatement per t binder</span><span className="num">{(p.bitumenEF - (p.biobinderEF - (p.includeBiogenic ? p.biogenicStorage : 0))).toFixed(2)} tCO₂e/t</span></div>
+                  <div className="flex justify-between"><span>Net abatement per t binder</span><span className="num">{(p.bitumenEF - res.lifecycleBioEF).toFixed(2)} tCO₂e/t</span></div>
                   <div className="flex justify-between"><span>Social abatement cost (ex-carbon)</span><span className="num">${fn(res.costPerTonne)}/tCO₂e</span></div>
                   <div className="flex justify-between"><span>Biobinder produced</span><span className="num">{fn(res.biobinderTotal / 1000)} kt</span></div>
                   <p className="pt-2 text-xs text-muted-foreground">A negative abatement cost means the project pays for itself before carbon is valued. Compare against the shadow carbon price to judge cost-effectiveness.</p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="counterfactual" className="mt-4 grid gap-4 xl:grid-cols-2">
+              <Card>
+                <CardHeader><CardTitle className="text-base">Without the plant (counterfactual)</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <p><b>Roads:</b> sealed with 100% imported bitumen at border cost; the biobinder only displaces this volume.</p>
+                  <p><b>Forestry residue:</b> largely left on skid sites/cutover to decay, with some sold for energy or pellets. The feedstock is costed at {fp(p.feedstockOppCost, 0)} of its delivered price (NZ$ {fn(p.feedstockPrice * p.feedstockOppCost)}/t) to reflect its best alternative use; set to 1 if residue has a full market alternative.</p>
+                  <p><b>Carbon:</b> {fp(p.counterfactualStorage, 0)} of the binder's biogenic carbon is assumed to have stayed stored anyway (slow decay, soil carbon), so it is not credited.</p>
+                  <p><b>Imports:</b> displaced bitumen is valued at {fp(p.borderPriceShare, 0)} of the delivered price — GST, levies and retained domestic margins are transfers, not resource savings.</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-base">Biogenic carbon — full lifecycle (per t binder)</CardTitle></CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  {([
+                    ["Process emissions", p.biobinderEF],
+                    ["Residue collection, chipping & haul", p.feedstockRatio * p.collectionEF],
+                    ["Gross biogenic carbon stored", -p.biogenicStorage],
+                    ["Less: would be stored anyway", p.biogenicStorage * p.counterfactualStorage],
+                    ["Less: released at end of road life", p.biogenicStorage * (1 - p.counterfactualStorage) * p.eolRelease],
+                  ] as const).map(([l, v]) => (
+                    <div key={l} className="flex justify-between"><span>{l}</span><span className="num">{v.toFixed(3)}</span></div>
+                  ))}
+                  <div className="flex justify-between border-t border-border pt-1 font-semibold"><span>Lifecycle biobinder EF{p.includeBiogenic ? "" : " (storage off)"}</span><span className="num">{res.lifecycleBioEF.toFixed(3)} tCO₂e/t</span></div>
+                  <div className="flex justify-between"><span>vs bitumen EF</span><span className="num">{p.bitumenEF.toFixed(3)} tCO₂e/t</span></div>
+                </CardContent>
+              </Card>
+              <Card className="xl:col-span-2">
+                <CardHeader><CardTitle className="text-base">Same road service: cost per lane-km per year</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Binder</TableHead><TableHead className="text-right">Reseal life</TableHead><TableHead className="text-right">Annualised cost (NZ$/lane-km/yr)</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      <TableRow><TableCell>Bitumen (border cost)</TableCell><TableCell className="num text-right">{p.resealInterval.toFixed(1)} yrs</TableCell><TableCell className="num text-right">{fn(res.laneKm.bitumenPerLkmYr)}</TableCell></TableRow>
+                      <TableRow><TableCell>Biobinder (resource cost)</TableCell><TableCell className="num text-right">{(p.resealInterval * p.pavementLifeRatio).toFixed(1)} yrs</TableCell><TableCell className="num text-right">{fn(res.laneKm.bioPerLkmYr)}</TableCell></TableRow>
+                    </TableBody>
+                  </Table>
+                  <p className="text-xs text-muted-foreground">Compares the cost of delivering the same sealed lane-km over its life (binder + associated maintenance, annualised at {p.discountRate}%), so durability differences show up directly rather than being hidden in a per-tonne comparison. The model's default life ratio of 1.0 assumes equal durability — this is unproven and should be tested (the Monte Carlo allows down to 0.85). Approx. {fn(res.laneKm.lkmServed)} lane-km reseals supplied over the horizon.</p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -364,7 +415,21 @@ function Index() {
                   {[["Mean NPV", fm(mc.mean)], ["NPV 90% interval", `${fm(mc.p5)} to ${fm(mc.p95)}`], ["BCR P5 / P50 / P95", `${mc.bcrP5.toFixed(2)} / ${mc.bcrP50.toFixed(2)} / ${mc.bcrP95.toFixed(2)}`], ["Probability NPV > 0", fp(mc.probPositive, 0)]].map(([a, b]) => (
                     <div key={a} className="flex justify-between"><span>{a}</span><span className="num">{b}</span></div>
                   ))}
-                  <p className="pt-2 text-xs text-muted-foreground">Triangular distributions on 10 uncertain parameters (prices, costs, adoption, carbon, emission factors). Seeded for reproducibility.</p>
+                  <p className="pt-2 text-xs text-muted-foreground">See the assumptions table below — this probability depends entirely on those ranges.</p>
+                </CardContent>
+              </Card>
+              <Card className="xl:col-span-2">
+                <CardHeader><CardTitle className="text-base">Monte Carlo assumptions</CardTitle></CardHeader>
+                <CardContent>
+                  <p className="mb-2 text-xs text-muted-foreground">600 draws, seed 42. Each variable is drawn independently from a triangular distribution (low, current value, high). Correlations are ignored, which narrows the spread, and variables not listed are held fixed. Ranges are judgement-based, not estimated from data — widen them to stress-test.</p>
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Variable</TableHead><TableHead className="text-right">Low</TableHead><TableHead className="text-right">Mode</TableHead><TableHead className="text-right">High</TableHead><TableHead>Basis</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {MC_VARY.map((v) => { const b = p[v.key] as number; return (
+                        <TableRow key={v.key}><TableCell>{v.label}</TableCell><TableCell className="num text-right">{fn(b * v.lo, 2)}</TableCell><TableCell className="num text-right">{fn(b, 2)}</TableCell><TableCell className="num text-right">{fn(b * v.hi, 2)}</TableCell><TableCell className="text-xs text-muted-foreground">{v.why}</TableCell></TableRow>
+                      ); })}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -445,7 +510,7 @@ function Index() {
                   <section><h3 className="text-lg font-semibold">3. Methodology</h3>
                     <p><strong>SCBA core.</strong> Resource costs (capital, operating, energy, feedstock at opportunity cost) are compared with social benefits: avoided import resource cost of bitumen, shadow-priced carbon, pavement maintenance differences, air-quality co-benefits, shadow wage gains and residual value. Government funding attracts a deadweight cost via the MCPF ({p.mcpf}).</p>
                     <p><strong>I/O impact core.</strong> Final-demand shocks to five aggregated sectors are run through {p.useTypeII ? "Type II" : "Type I"} multipliers derived from Stats NZ national input-output tables, giving gross output, value added, household income and employment. Displaced fuel import/wholesale activity enters as a negative shock.</p>
-                    <p><strong>CGE-mimic adjustments.</strong> (i) Armington substitution (σ = {p.armingtonSigma}) scales the adoption ceiling with the bitumen/biobinder relative price; (ii) labour-market crowding-out of {fp(res.crowdOut, 0)} (base {fp(p.baseCrowdOut, 0)}, scaled by NAIRU {p.nairu}% / unemployment {p.unemployment}%) converts gross I/O impacts to net economy-wide effects; (iii) shadow wages reflect the opportunity cost of labour; (iv) shadow FX premium on import savings ({p.shadowFxPremium}%). Economy-wide impacts are reported separately and are <em>not</em> added to the SCBA to avoid double counting.</p>
+                    <p><strong>Scenario adjustments (not a CGE approximation).</strong> (i) Armington substitution (σ = {p.armingtonSigma}) scales the adoption ceiling with the bitumen/biobinder relative price; (ii) labour-market crowding-out of {fp(res.crowdOut, 0)} (base {fp(p.baseCrowdOut, 0)}, scaled by NAIRU {p.nairu}% / unemployment {p.unemployment}%) converts gross I/O impacts to net economy-wide effects; (iii) shadow wages reflect the opportunity cost of labour; (iv) shadow FX premium on import savings ({p.shadowFxPremium}%). Economy-wide impacts are reported separately and are <em>not</em> added to the SCBA to avoid double counting.</p>
                   </section>
 
                   <section><h3 className="text-lg font-semibold">4. Results</h3>
@@ -465,7 +530,7 @@ function Index() {
 
                   <section><h3 className="text-lg font-semibold">6. Limitations</h3>
                     <ul className="list-disc space-y-1 pl-5">
-                      <li>I/O assumes fixed technical coefficients and constant returns; the CGE-mimic layer approximates, but does not solve, general equilibrium price and factor-market responses.</li>
+                      <li>I/O assumes fixed technical coefficients and constant returns; the crowding-out scenario adjustment is an assumption-driven sensitivity, not a general-equilibrium solution; I/O activity results are not included in the social NPV.</li>
                       <li>Multipliers are aggregated approximations of Stats NZ tables; replace with project-specific extracts where available.</li>
                       <li>Biobinder pavement performance in NZ conditions (chipseal dominance) is still being trialled; life-ratio and emission factors carry high uncertainty.</li>
                       <li>Biogenic carbon accounting is contested; test results with storage switched off.</li>

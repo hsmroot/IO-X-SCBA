@@ -26,6 +26,7 @@ export interface Inputs {
   bitumenPrice: number; // NZ$/t CIF delivered
   bitumenPriceGrowth: number; // real %/yr
   bitumenImportShare: number; // 0-1
+  borderPriceShare: number; // 0-1 share of delivered price that is real resource cost (excl. taxes/transfers & retained domestic margins)
   maxBlendShare: number; // technical cap on substitution share of binder market
   adoptionMidpoint: number; // years after production start to reach 50% of cap
   adoptionSteepness: number;
@@ -47,11 +48,16 @@ export interface Inputs {
   // Performance
   pavementLifeRatio: number; // >1 = longer life
   maintenanceCostPerT: number; // NZ$ lifecycle maintenance tied to 1 t binder
+  binderPerLaneKm: number; // t binder per lane-km per reseal
+  resealInterval: number; // years between reseals (conventional bitumen)
   // Environment
   bitumenEF: number; // tCO2e/t cradle-to-site
   biobinderEF: number; // tCO2e/t (may be negative w/ biogenic storage)
   includeBiogenic: boolean;
-  biogenicStorage: number; // tCO2e/t stored
+  biogenicStorage: number; // tCO2e/t gross biogenic carbon in binder
+  collectionEF: number; // tCO2e per t residue (collection, chipping, haulage)
+  counterfactualStorage: number; // 0-1 share of storage that would have occurred anyway (residue left on site / soil)
+  eolRelease: number; // 0-1 share of stored carbon released at end of pavement life (milling, oxidation)
   carbonPrice: number; // NZ$/tCO2e shadow price at start
   carbonPriceGrowth: number; // real %/yr
   airQualityPerT: number; // NZ$/t co-benefit (fumes / PAH reduction)
@@ -64,6 +70,7 @@ export interface Inputs {
   baseCrowdOut: number; // share of IO gross impacts displaced at NAIRU
   shadowFxPremium: number; // % premium on foreign exchange savings
   useTypeII: boolean;
+  includeShadowWage: boolean; // off by default: keeps labour-market effects out of the social NPV
   mults: Record<Sector, SectorMult>;
 }
 
@@ -87,6 +94,7 @@ export const DEFAULT_INPUTS: Inputs = {
   bitumenPrice: 1350,
   bitumenPriceGrowth: 0.5,
   bitumenImportShare: 1.0,
+  borderPriceShare: 0.85,
   maxBlendShare: 0.2,
   adoptionMidpoint: 6,
   adoptionSteepness: 0.8,
@@ -106,10 +114,15 @@ export const DEFAULT_INPUTS: Inputs = {
   rdTrialCost: 6,
   pavementLifeRatio: 1.0,
   maintenanceCostPerT: 900,
+  binderPerLaneKm: 6,
+  resealInterval: 12,
   bitumenEF: 0.48,
   biobinderEF: 0.35,
   includeBiogenic: true,
   biogenicStorage: 1.1,
+  collectionEF: 0.02,
+  counterfactualStorage: 0.3,
+  eolRelease: 0.5,
   carbonPrice: 150,
   carbonPriceGrowth: 2.5,
   airQualityPerT: 25,
@@ -121,6 +134,7 @@ export const DEFAULT_INPUTS: Inputs = {
   baseCrowdOut: 0.5,
   shadowFxPremium: 0,
   useTypeII: true,
+  includeShadowWage: false,
   mults: DEFAULT_MULTS,
 };
 
@@ -202,6 +216,9 @@ export interface Results {
   importSavingsTotal: number;
   biobinderTotal: number;
   avgResourceCost: number;
+  netStoragePerT: number; // tCO2e/t after counterfactual & end-of-life
+  lifecycleBioEF: number; // tCO2e/t full lifecycle biobinder
+  laneKm: { bitumenPerLkmYr: number; bioPerLkmYr: number; lkmServed: number };
 }
 
 const logistic = (x: number, mid: number, k: number) => 1 / (1 + Math.exp(-k * (x - mid)));
@@ -249,6 +266,8 @@ export function runModel(p: Inputs): Results {
   };
 
   let cum = 0;
+  const netStoragePerT = p.biogenicStorage * (1 - p.counterfactualStorage) * (1 - p.eolRelease);
+  const lifecycleBioEF = p.biobinderEF + p.feedstockRatio * p.collectionEF - (p.includeBiogenic ? netStoragePerT : 0);
   const shadowWageFactor = Math.min(1, Math.max(0.5, 1 - (p.unemployment - p.nairu) * 0.08));
 
   for (let t = 0; t <= p.horizon; t++) {
@@ -279,15 +298,16 @@ export function runModel(p: Inputs): Results {
     const feedstock = feedstockFin * p.feedstockOppCost;
     const energy = (bioT * p.energyPerT) / 1e6;
 
-    const avoidedImports = (bioT * bitPrice) / 1e6;
+    // Social value of displaced bitumen = border (resource) cost, not the tax-inclusive delivered price
+    const avoidedImports = (bioT * bitPrice * p.borderPriceShare) / 1e6;
     const fxPremium = avoidedImports * p.bitumenImportShare * (p.shadowFxPremium / 100);
-    const bioEF = p.biobinderEF - (p.includeBiogenic ? p.biogenicStorage : 0);
+    const bioEF = lifecycleBioEF;
     const emAvoided = bioT * (p.bitumenEF - bioEF);
     const carbonBenefit = (emAvoided * cPrice) / 1e6;
     const airQuality = (bioT * p.airQualityPerT) / 1e6;
     const maintenance = (bioT * p.maintenanceCostPerT * (1 - 1 / p.pavementLifeRatio)) / 1e6;
     const laborCost = opex * p.laborSharePerT + capexY * p.capexDomesticShare * 0.35;
-    const shadowWage = laborCost * (1 - shadowWageFactor);
+    const shadowWage = p.includeShadowWage ? laborCost * (1 - shadowWageFactor) : 0;
     const salvage = t === p.horizon ? p.capex * p.salvageShare : 0;
 
     const totalCost = capexY + opex + feedstock + energy + rd + deadweight;
@@ -379,7 +399,34 @@ export function runModel(p: Inputs): Results {
     peakJobs: Math.max(...rows.map((x) => x.employment)), benefitBreakdown, costBreakdown,
     importSavingsTotal: rows.reduce((a, x) => a + x.avoidedImports, 0), biobinderTotal,
     avgResourceCost: p.opexPerT + p.feedstockRatio * p.feedstockPrice + p.energyPerT,
+    netStoragePerT, lifecycleBioEF, laneKm: laneKmCompare(p, biobinderTotal),
   };
+}
+
+// Same road service basis: annualised binder + maintenance cost per lane-km (year-0 prices, NZ$/lane-km/yr)
+export function laneKmCompare(p: Inputs, bioTotal = 0) {
+  const r = p.discountRate / 100;
+  const crf = (n: number) => (r === 0 ? 1 / n : r / (1 - Math.pow(1 + r, -n)));
+  const reseal = (cost: number, life: number) => cost * crf(life);
+  const bitCost = p.binderPerLaneKm * (p.bitumenPrice * p.borderPriceShare + p.maintenanceCostPerT);
+  const bioUnit = p.opexPerT + p.feedstockRatio * p.feedstockPrice * p.feedstockOppCost + p.energyPerT;
+  const bioCost = p.binderPerLaneKm * (bioUnit + p.maintenanceCostPerT);
+  return {
+    bitumenPerLkmYr: reseal(bitCost, p.resealInterval),
+    bioPerLkmYr: reseal(bioCost, p.resealInterval * p.pavementLifeRatio),
+    lkmServed: bioTotal / Math.max(p.binderPerLaneKm, 0.01),
+  };
+}
+
+// Crowding-out only rescales the (separate) economic-impact results; it never enters the social NPV.
+export function crowdOutSensitivity(p: Inputs, values = [0, 0.25, 0.5, 0.75, 0.9]) {
+  const base = runModel(p);
+  return values.map((c) => ({
+    crowdOut: c,
+    gdp: base.ioGross.gdp * (1 - c),
+    jobs: (base.ioGross.jobs * (1 - c)) / base.rows.length,
+    income: base.ioGross.income * (1 - c),
+  }));
 }
 
 export const TORNADO_KEYS: { key: keyof Inputs; label: string }[] = [
@@ -395,6 +442,9 @@ export const TORNADO_KEYS: { key: keyof Inputs; label: string }[] = [
   { key: "bitumenEF", label: "Bitumen emission factor" },
   { key: "pavementLifeRatio", label: "Pavement life ratio" },
   { key: "mcpf", label: "MCPF" },
+  { key: "borderPriceShare", label: "Border-price share" },
+  { key: "eolRelease", label: "End-of-life C release" },
+  { key: "counterfactualStorage", label: "Counterfactual storage" },
 ];
 
 export function tornado(p: Inputs, swing = 0.2) {
@@ -421,13 +471,25 @@ const tri = (u: number, a: number, c: number, b: number) => {
   return u < f ? a + Math.sqrt(u * (b - a) * (c - a)) : b - Math.sqrt((1 - u) * (b - a) * (b - c));
 };
 
+// Transparent Monte Carlo spec: triangular(lo×base, base, hi×base), independent draws, seed 42.
+export const MC_VARY: { key: keyof Inputs; label: string; lo: number; hi: number; why: string }[] = [
+  { key: "bitumenPrice", label: "Bitumen price", lo: 0.75, hi: 1.3, why: "Singapore bitumen price volatility 2015–2024" },
+  { key: "carbonPrice", label: "Shadow carbon price", lo: 0.5, hi: 1.6, why: "Spread of Treasury CBAx low/high values" },
+  { key: "capex", label: "Capital cost", lo: 0.8, hi: 1.5, why: "First-of-a-kind plant cost overrun (right-skewed)" },
+  { key: "opexPerT", label: "Operating cost", lo: 0.8, hi: 1.35, why: "Pilot-scale uncertainty" },
+  { key: "feedstockPrice", label: "Residue price", lo: 0.8, hi: 1.4, why: "Haul distance and competing demand" },
+  { key: "maxBlendShare", label: "Max blend share", lo: 0.5, hi: 1.5, why: "Specification / trial outcomes" },
+  { key: "biogenicStorage", label: "Biogenic storage", lo: 0.4, hi: 1.3, why: "LCA method & residue carbon content" },
+  { key: "eolRelease", label: "End-of-life release", lo: 0.5, hi: 1.8, why: "Recycling vs oxidation of milled seal" },
+  { key: "counterfactualStorage", label: "Counterfactual storage", lo: 0.5, hi: 2.0, why: "Decay rate of residue left on site" },
+  { key: "pavementLifeRatio", label: "Pavement life ratio", lo: 0.85, hi: 1.07, why: "Durability unproven; downside-skewed" },
+  { key: "adoptionMidpoint", label: "Adoption midpoint", lo: 0.7, hi: 1.5, why: "NZTA approval timing" },
+  { key: "bitumenEF", label: "Bitumen emission factor", lo: 0.8, hi: 1.2, why: "LCI database range" },
+];
+
 export function monteCarlo(p: Inputs, n = 600) {
   const rnd = mulberry32(42);
-  const vary: [keyof Inputs, number, number][] = [
-    ["bitumenPrice", 0.75, 1.3], ["carbonPrice", 0.5, 1.6], ["capex", 0.8, 1.5], ["opexPerT", 0.8, 1.35],
-    ["feedstockPrice", 0.8, 1.4], ["maxBlendShare", 0.5, 1.5], ["biogenicStorage", 0.4, 1.3],
-    ["pavementLifeRatio", 0.93, 1.07], ["adoptionMidpoint", 0.7, 1.5], ["bitumenEF", 0.8, 1.2],
-  ];
+  const vary = MC_VARY.map((v) => [v.key, v.lo, v.hi] as [keyof Inputs, number, number]);
   const npvs: number[] = [], bcrs: number[] = [];
   for (let i = 0; i < n; i++) {
     const q: Inputs = { ...p };
